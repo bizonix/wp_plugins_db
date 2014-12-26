@@ -1,4 +1,5 @@
 <?php
+ini_set("memory_limit", "1024M");
 require 'rolling-curl/src/RollingCurl/RollingCurl.php';
 require 'rolling-curl/src/RollingCurl/Request.php';
 function Timer() {
@@ -29,7 +30,7 @@ for ($i = 1; $i < 258; $i++) {
     );
     $rollingCurl->post('http://api.wordpress.org/plugins/info/1.0/', http_build_query($data));
 }
-$results = array();
+$results = file_exists('wp_plg_db.json')?json_decode(file_get_contents('wp_plg_db.json'),true):array();
 echo "Fetching..." . PHP_EOL;
 $rollingCurl->setCallback(function (\RollingCurl\Request $request, \RollingCurl\RollingCurl $rollingCurl) use (&$results) {
     if ($request->getResponseInfo()->http_code == 200) {
@@ -38,9 +39,10 @@ $rollingCurl->setCallback(function (\RollingCurl\Request $request, \RollingCurl\
             echo "Fetch complete for (" . $request->getUrl() . ") Page:" . $json->info['page'] . PHP_EOL;
             
             foreach ($json->plugins as $plugin) {
-                $results[$plugin->slug]=null;
-                
-                echo "Fetch new for (" . $plugin->slug . ") Plugin:" . $plugin->name . PHP_EOL;
+                if(!array_key_exists($plugin->slug,$results)) {
+                    $results[$plugin->slug]=null;
+                    echo "Fetch new for (" . $plugin->slug . ") Plugin:" . $plugin->name . PHP_EOL;
+                } 
                 $data = array(
                     'action' => 'plugin_information',
                     'request' => serialize((object)array(
@@ -64,13 +66,13 @@ $rollingCurl->setCallback(function (\RollingCurl\Request $request, \RollingCurl\
             }
         }
         if (isset($json->download_link)) {
-            echo $json->slug . " ||| " . $json->download_link . "\n";
+           # echo $json->slug . " ||| " . $json->download_link . "\n";
             $results[$json->slug]=array(
                 'name' => $json->name,
 //              'slug' => $json->slug,
                 'download_link' => $json->download_link
             );
-            
+            file_put_contents('wp_plg_db.json', json_encode($results), LOCK_EX );           
         }
     } else {
         $rollingCurl->post($request->getUrl(), $request->getPostData());
@@ -85,4 +87,4 @@ echo "All results: " . PHP_EOL;
 
 file_put_contents('wp_plg_db.json', json_encode($results));
 
-print_r($results);
+//print_r($results);
